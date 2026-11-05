@@ -1,69 +1,271 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import api from "@/utils/api";
+import { Eye, EyeOff, LoaderCircle, LogIn } from "lucide-react";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const passwordRef = useRef(null);
+
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+  });
+
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // Restore remembered email
+  useEffect(() => {
+    const savedEmail = localStorage.getItem("rememberedEmail");
+
+    if (savedEmail) {
+      setForm((prev) => ({
+        ...prev,
+        email: savedEmail,
+      }));
+
+      setRememberMe(true);
+    }
+  }, []);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+
+    setError("");
+  };
+
+  const handleRememberMe = (e) => {
+    const checked = e.target.checked;
+    setRememberMe(checked);
+
+    if (!checked) {
+      localStorage.removeItem("rememberedEmail");
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (loading) return;
+
+    setLoading(true);
+    setError("");
+
+    // Read the DOM password too, for browser autofill support.
+    const email = form.email.trim();
+    const password = passwordRef.current?.value || form.password;
+
+    try {
+      const response = await api.post("/auth/login", {
+        email,
+        password,
+      });
+
+      const data = response.data;
+
+      if (!data?.success) {
+        setError(data?.message || "Login failed.");
+        return;
+      }
+
+      if (!data?.token || !data?.user) {
+        setError("Invalid login response.");
+        return;
+      }
+
+      const role = String(data.user?.role?.name || data.user?.role || "")
+        .toLowerCase()
+        .replace(/[\s-]/g, "_");
+
+      if (role !== "owner" && role !== "super_admin" && role !== "superadmin") {
+        setError("Your account does not have dashboard access.");
+        return;
+      }
+
+      // Remember only the email in localStorage.
+      if (rememberMe) {
+        localStorage.setItem("rememberedEmail", email);
+      } else {
+        localStorage.removeItem("rememberedEmail");
+      }
+
+      // Existing authentication storage.
+      localStorage.setItem("accessToken", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      // Keep the form fields mounted until navigation.
+      // Browser password managers may offer to save credentials.
+      if (role === "super_admin" || role === "superadmin") {
+        router.replace("/super-admin");
+      } else {
+        router.replace("/dashboard");
+      }
+    } catch (err) {
+      console.error("Login Error:", err);
+
+      setError(
+        err.response?.data?.message || "Login failed. Please try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.js
-            </code>{" "}
-            file.
+    <main className="min-h-screen bg-slate-950 flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-white">
+            CodeAgiles <span className="text-cyan-400">AfterSale AI</span>
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+
+          <p className="text-slate-400 mt-3">
+            Sign in to manage your customer experience
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+
+        <form
+          id="login-form"
+          name="login"
+          method="post"
+          onSubmit={handleSubmit}
+          autoComplete="on"
+          className="bg-slate-900 border border-slate-800 rounded-2xl p-8 space-y-5"
+        >
+          <h2 className="text-2xl font-semibold text-white">Welcome back</h2>
+
+          {/* Error */}
+          {error && (
+            <div
+              role="alert"
+              className="bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg p-3 text-sm"
+            >
+              {error}
+            </div>
+          )}
+
+          {/* Email */}
+          <div>
+            <label
+              htmlFor="email"
+              className="block text-sm text-slate-300 mb-2"
+            >
+              Email address
+            </label>
+
+            <input
+              id="email"
+              type="email"
+              name="username"
+              required
+              autoComplete="username"
+              value={form.email}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  email: e.target.value,
+                }))
+              }
+              placeholder="you@company.com"
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-400"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </div>
+
+          {/* Password */}
+          <div>
+            <label
+              htmlFor="password"
+              className="block text-sm text-slate-300 mb-2"
+            >
+              Password
+            </label>
+
+            <div className="relative">
+              <input
+                ref={passwordRef}
+                id="password"
+                type={showPassword ? "text" : "password"}
+                name="password"
+                required
+                autoComplete="current-password"
+                value={form.password}
+                onChange={handleChange}
+                placeholder="Enter your password"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 pr-12 text-white outline-none focus:border-cyan-400"
+              />
+
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-400"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Remember Me */}
+          <div className="flex items-center justify-between gap-3">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                name="rememberMe"
+                checked={rememberMe}
+                onChange={handleRememberMe}
+                className="w-4 h-4 rounded accent-cyan-500 cursor-pointer"
+              />
+
+              <span className="text-sm text-slate-300">Remember me</span>
+            </label>
+
+            <Link
+              href="/forgot-password"
+              className="text-sm text-cyan-400 hover:text-cyan-300 font-medium"
+            >
+              Forgot password?
+            </Link>
+          </div>
+
+          {/* Login */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full flex justify-center items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold py-3 rounded-lg disabled:opacity-60 transition-colors"
           >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            {loading ? (
+              <LoaderCircle size={20} className="animate-spin" />
+            ) : (
+              <LogIn size={20} />
+            )}
+
+            {loading ? "Signing in..." : "Sign in"}
+          </button>
+
+          {/* Register */}
+          <p className="text-center text-slate-400 text-sm">
+            Don't have an account?{" "}
+            <Link
+              href="/register"
+              className="text-cyan-400 font-medium hover:text-cyan-300"
+            >
+              Create account
+            </Link>
+          </p>
+        </form>
+      </div>
+    </main>
   );
 }

@@ -1,0 +1,46 @@
+"use client";
+
+import { createContext, useContext, useEffect, useState } from "react";
+
+const ThemeContext = createContext(null);
+
+export function ThemeProvider({ children }) {
+  const [theme, setTheme] = useState("dark");
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("codeagiles-theme");
+
+    const selectedTheme =
+      savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
+
+    setTheme(selectedTheme);
+
+    document.documentElement.setAttribute("data-theme", selectedTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+
+    setTheme(nextTheme);
+
+    localStorage.setItem("codeagiles-theme", nextTheme);
+
+    document.documentElement.setAttribute("data-theme", nextTheme);
+  };
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export function useTheme() {
+  const context = useContext(ThemeContext);
+
+  if (!context) {
+    throw new Error("useTheme must be used inside ThemeProvider");
+  }
+
+  return context;
+}
